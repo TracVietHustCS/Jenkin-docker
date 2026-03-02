@@ -1,0 +1,54 @@
+services:
+  jenkins-docker:
+    image: docker:dind
+    container_name: jenkins-docker
+    privileged: true
+    environment:
+      # Báo cho Docker daemon tự động tạo các chứng chỉ bảo mật (TLS certs/keys) 
+      # và lưu chúng vào thư mục /certs bên trong container này.
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - jenkins-docker-certs:/certs/client
+      - jenkins-data:/var/jenkins_home
+    ports:
+      - "2376:2376"
+    networks:
+      jenkins:
+        aliases:
+          - docker
+    command: --storage-driver overlay2
+
+  my-jenkins:
+    image: my-jenkins
+    build:
+      context: .
+    container_name: my-jenkins
+    restart: on-failure
+    environment:
+      # Yêu cầu Jenkins không tìm Docker ở máy hiện hành, mà hãy gửi mọi lệnh 
+      # Docker (như build, run) qua mạng TCP đến container có tên 'docker' ở cổng 2376.
+      - DOCKER_HOST=tcp://docker:2376
+      
+      # Chỉ đường cho Jenkins biết nơi lấy "chìa khóa" bảo mật (các file .pem) 
+      # đã được chia sẻ qua volume để chứng minh quyền truy cập.
+      - DOCKER_CERT_PATH=/certs/client
+      
+      # Bật chế độ xác thực bắt buộc. Đảm bảo mọi luồng dữ liệu truyền giữa 
+      # Jenkins và Docker daemon đều được mã hóa và xác thực an toàn.
+      - DOCKER_TLS_VERIFY=1
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    networks:
+      - jenkins
+
+networks:
+  jenkins:
+    driver: bridge
+
+volumes:
+  jenkins-docker-certs:
+  jenkins-data:
